@@ -15,18 +15,18 @@ class _BottomnavState extends State<Bottomnav> {
   int currentTabIndex = 0;
   late List<Widget> pages;
 
-  late Widget currentPage;
+  final GlobalKey<HomeState> homeKey = GlobalKey<HomeState>(); // ✅ Key for Home
+
   late Home home;
   late Workout workout;
   late Profile profile;
 
   @override
   void initState() {
-    home = Home();
+    home = Home(key: homeKey);
     workout = Workout();
     profile = Profile();
     pages = [home, workout, profile];
-    currentPage = Home();
     super.initState();
   }
 
@@ -37,13 +37,18 @@ class _BottomnavState extends State<Bottomnav> {
         height: 65,
         backgroundColor: Colors.white,
         color: const Color.fromARGB(255, 231, 193, 42),
-        animationDuration: Duration(milliseconds: 500),
-        onTap: (int index) {
+        animationDuration: const Duration(milliseconds: 500),
+        onTap: (int index) async {
           setState(() {
             currentTabIndex = index;
           });
+
+          // ✅ When switching to Home tab, refresh stats
+          if (index == 0) {
+            await homeKey.currentState?.refreshStats();
+          }
         },
-        items: [
+        items: const [
           Icon(Icons.home, color: Colors.black, size: 30),
           Icon(Icons.run_circle, color: Colors.black, size: 30),
           Icon(Icons.person, color: Colors.black, size: 30),

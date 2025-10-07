@@ -31,10 +31,18 @@ dependencies:
   flutter:
     sdk: flutter
   curved_navigation_bar:
+  http:
+  shared_preferences:
+  flutter_launcher_icons:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "images/app.png"
+  remove_alpha_ios: true
 
 dev_dependencies:
   flutter_test:

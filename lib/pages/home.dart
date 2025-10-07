@@ -1,14 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:my_fitness/APIs/api_service.dart';
+import 'package:my_fitness/exercise/stretching_page.dart';
+import 'package:my_fitness/pages/workout.dart';
 import 'package:my_fitness/services/support_widget.dart';
+import 'package:my_fitness/services/workout_stats_storage.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
 
   @override
-  State<Home> createState() => _HomeState();
+  State<Home> createState() => HomeState();
 }
 
-class _HomeState extends State<Home> {
+class HomeState extends State<Home> {
+  String userName = "";
+  String avatarUrl = "";
+
+  int totalWorkouts = 0;
+  int inProgressWorkouts = 0;
+  double totalMinutes = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadUserData();
+  }
+
+  Future<void> refreshStats() async {
+    final stats = await WorkoutStatsStorage.loadStats();
+    setState(() {
+      totalWorkouts = stats['finishedWorkouts'];
+      inProgressWorkouts = stats['inProgressWorkouts'];
+      totalMinutes = stats['totalMinutes'];
+    });
+  }
+
+  void _loadUserData() async {
+    try {
+      final profile = await ApiService.getProfile();
+      setState(() {
+        userName = profile['name'] ?? "User";
+        avatarUrl = profile['avatar'] ?? "";
+      });
+
+      final stats = await WorkoutStatsStorage.loadStats();
+      setState(() {
+        totalWorkouts = stats['finishedWorkouts'];
+        inProgressWorkouts = stats['inProgressWorkouts'];
+        totalMinutes = stats['totalMinutes'];
+      });
+    } catch (e) {
+      print("Error loading user data: $e");
+    }
+  }
+
+  void updateWorkoutStats({int? finished, int? inProgress, double? minutes}) {
+    setState(() {
+      if (finished != null) totalWorkouts = finished;
+      if (inProgress != null) inProgressWorkouts = inProgress;
+      if (minutes != null) totalMinutes = minutes;
+    });
+  }
+
+  void _openWorkoutPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Workout(onStatsUpdate: updateWorkoutStats),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -18,7 +86,6 @@ class _HomeState extends State<Home> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BackButton(),
               //column 1
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -26,7 +93,10 @@ class _HomeState extends State<Home> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Hi, Tess", style: AppWidget.healineTextStyle(24)),
+                      Text(
+                        "Hi, $userName",
+                        style: AppWidget.healineTextStyle(24),
+                      ),
                       Text(
                         "Let's check your activity",
                         style: AppWidget.mediumTextStyle(18),
@@ -68,7 +138,10 @@ class _HomeState extends State<Home> {
                             style: AppWidget.mediumTextStyle(18),
                           ),
                           SizedBox(height: 20),
-                          Text("6", style: AppWidget.healineTextStyle(40)),
+                          Text(
+                            totalWorkouts.toString(),
+                            style: AppWidget.healineTextStyle(40),
+                          ),
                           Text(
                             "Completed Workouts",
                             textAlign: TextAlign.center,
@@ -103,7 +176,7 @@ class _HomeState extends State<Home> {
                               Row(
                                 children: [
                                   Text(
-                                    "2",
+                                    inProgressWorkouts.toString(),
                                     style: AppWidget.healineTextStyle(24),
                                   ),
                                   SizedBox(width: 10),
@@ -141,7 +214,7 @@ class _HomeState extends State<Home> {
                               Row(
                                 children: [
                                   Text(
-                                    "0.0",
+                                    totalMinutes.toStringAsFixed(1),
                                     style: AppWidget.healineTextStyle(24),
                                   ),
                                   SizedBox(width: 10),
@@ -164,6 +237,35 @@ class _HomeState extends State<Home> {
                   ),
                 ],
               ),
+              SizedBox(height: 20),
+              Center(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    await WorkoutStatsStorage.clearStats();
+                    setState(() {
+                      totalWorkouts = 0;
+                      inProgressWorkouts = 0;
+                      totalMinutes = 0;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Workout stats reset!")),
+                    );
+                  },
+                  icon: Icon(Icons.refresh, color: Colors.white),
+                  label: Text(
+                    "Reset Progress",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+
               //column 3
               SizedBox(height: 30),
               Text(
@@ -268,48 +370,58 @@ class _HomeState extends State<Home> {
                       ),
                     ),
                     SizedBox(width: 20),
-                    Container(
-                      margin: EdgeInsets.only(bottom: 10),
-                      child: Material(
-                        elevation: 3,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: EdgeInsets.only(left: 20),
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(255, 64, 198, 255),
-
-                            borderRadius: BorderRadius.circular(20),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StretchingPage(),
                           ),
-                          child: Row(
-                            children: [
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Stretching",
-                                    style: AppWidget.whiteBoldTextStyle(28),
-                                  ),
-                                  Text(
-                                    "10 Exercises",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                        );
+                      },
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: 10),
+                        child: Material(
+                          elevation: 3,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: EdgeInsets.only(left: 20),
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(255, 64, 198, 255),
+
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Stretching",
+                                      style: AppWidget.whiteBoldTextStyle(28),
                                     ),
-                                  ),
-                                  Text(
-                                    "40 Minutes",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                                    Text(
+                                      "10 Exercises",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              Image.asset("images/stretching.png"),
-                            ],
+                                    Text(
+                                      "40 Minutes",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Image.asset("images/stretching.png"),
+                              ],
+                            ),
                           ),
                         ),
                       ),
