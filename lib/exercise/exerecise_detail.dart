@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:my_fitness/APIs/api_service.dart';
 import 'package:my_fitness/services/support_widget.dart';
 import 'package:my_fitness/pages/workout.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ExerciseDetail extends StatefulWidget {
   final String name;
@@ -293,21 +294,83 @@ class _ExerciseDetailState extends State<ExerciseDetail> {
                           "timeInMinutes": timeInMinutes,
                         };
 
-                        final result = await ApiService.addWorkout("strength", [
-                          exercise,
-                        ]);
+                        try {
+                          // 1. Get the current workout list
+                          final existingWorkouts =
+                              await ApiService.getWorkouts();
 
-                        if (result["error"] == null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const Workout(),
+                          // 2. Check if exercise with same name exists
+                          final alreadyExists = existingWorkouts.any(
+                            (ex) => ex["exercises"].any(
+                              (e) =>
+                                  e["name"].toString().toLowerCase() ==
+                                  widget.name.toLowerCase(),
                             ),
                           );
-                        } else {
+
+                          if (alreadyExists) {
+                            // 3️⃣ Show message with option to go to Workout page
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "This exercise is already added. Please delete it before re-adding.",
+                                  style: AppWidget.whiteBoldTextStyle(16),
+                                ),
+                                action: SnackBarAction(
+                                  label: "Go to Workout",
+                                  textColor: Colors.black,
+                                  onPressed: () async {
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    final userId =
+                                        prefs.getString('userId') ?? "";
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            Workout(userId: userId),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                backgroundColor: const Color.fromARGB(
+                                  168,
+                                  126,
+                                  209,
+                                  234,
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // 4. Add new exercise if not duplicate
+                          final result = await ApiService.addWorkout(
+                            "strength",
+                            [exercise],
+                          );
+
+                          if (result["error"] == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "Successfully Added the exercise!",
+                                ),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Failed to save workout"),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        } catch (e) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Failed to save workout"),
+                            SnackBar(
+                              content: Text("Error: ${e.toString()}"),
+                              backgroundColor: Colors.red,
                             ),
                           );
                         }

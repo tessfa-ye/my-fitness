@@ -4,6 +4,7 @@ import 'package:my_fitness/exercise/stretching_page.dart';
 import 'package:my_fitness/pages/workout.dart';
 import 'package:my_fitness/services/support_widget.dart';
 import 'package:my_fitness/services/workout_stats_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -13,6 +14,7 @@ class Home extends StatefulWidget {
 }
 
 class HomeState extends State<Home> {
+  String userId = "";
   String userName = "";
   String avatarUrl = "";
 
@@ -33,7 +35,13 @@ class HomeState extends State<Home> {
   }
 
   Future<void> refreshStats() async {
-    final stats = await WorkoutStatsStorage.loadStats();
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userId') ?? '';
+    if (userId.isEmpty) {
+      print("⚠️ No userId found");
+      return;
+    }
+    final stats = await WorkoutStatsStorage.loadStats(userId);
     setState(() {
       totalWorkouts = stats['finishedWorkouts'];
       inProgressWorkouts = stats['inProgressWorkouts'];
@@ -43,20 +51,41 @@ class HomeState extends State<Home> {
 
   void _loadUserData() async {
     try {
-      final profile = await ApiService.getProfile();
+      final prefs = await SharedPreferences.getInstance();
+
+      // Try to load from cache first
+      String? storedName = prefs.getString('userName');
+      String? storedAvatar = prefs.getString('avatar');
+      String? userId = prefs.getString('userId');
+
+      if (userId == null) {
+        // Fallback: fetch from API if not stored yet
+        final profile = await ApiService.getProfile();
+        userId = profile['_id'];
+        storedName = profile['name'] ?? "User";
+        storedAvatar = profile['avatar'] ?? "";
+
+        // Save for next time
+        await prefs.setString('userId', userId!);
+        await prefs.setString('userName', storedName!);
+        await prefs.setString('avatar', storedAvatar!);
+      }
+
       setState(() {
-        userName = profile['name'] ?? "User";
-        avatarUrl = profile['avatar'] ?? "";
+        this.userId = userId!;
+        userName = storedName ?? "User";
+        avatarUrl = storedAvatar ?? "";
       });
 
-      final stats = await WorkoutStatsStorage.loadStats();
+      // ✅ Load user stats
+      final stats = await WorkoutStatsStorage.loadStats(userId);
       setState(() {
         totalWorkouts = stats['finishedWorkouts'];
         inProgressWorkouts = stats['inProgressWorkouts'];
         totalMinutes = stats['totalMinutes'];
       });
     } catch (e) {
-      print("Error loading user data: $e");
+      print("⚠️ Error loading user data: $e");
     }
   }
 
@@ -72,7 +101,8 @@ class HomeState extends State<Home> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Workout(onStatsUpdate: updateWorkoutStats),
+        builder: (_) =>
+            Workout(onStatsUpdate: updateWorkoutStats, userId: userId),
       ),
     );
   }
@@ -248,16 +278,33 @@ class HomeState extends State<Home> {
                     ),
                   ),
                   onPressed: () async {
-                    await WorkoutStatsStorage.clearStats();
+                    final prefs = await SharedPreferences.getInstance();
+                    final userId = prefs.getString('userId');
+
+                    if (userId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("User not found. Please log in again."),
+                        ),
+                      );
+                      return;
+                    }
+
+                    await WorkoutStatsStorage.clearStats(userId);
+
                     setState(() {
                       totalWorkouts = 0;
                       inProgressWorkouts = 0;
                       totalMinutes = 0;
                     });
+
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Workout stats reset!")),
+                      const SnackBar(
+                        content: Text("✅ Daily activity stats cleared!"),
+                      ),
                     );
                   },
+
                   icon: Icon(Icons.refresh, color: Colors.white),
                   label: Text(
                     "Reset Progress",

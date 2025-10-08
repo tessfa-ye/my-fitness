@@ -1,20 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:my_fitness/APIs/api_service.dart';
 import 'package:my_fitness/services/support_widget.dart';
 import 'package:my_fitness/services/workout_stats_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Workout extends StatefulWidget {
   final Function({int? finished, int? inProgress, double? minutes})?
   onStatsUpdate;
+  final String? userId;
 
-  const Workout({super.key, this.onStatsUpdate});
+  const Workout({super.key, this.onStatsUpdate, this.userId});
 
   @override
   State<Workout> createState() => _WorkoutState();
 }
 
 class _WorkoutState extends State<Workout> {
+  String? userId;
   List<dynamic> workouts = [];
   bool isLoading = true;
 
@@ -27,33 +31,64 @@ class _WorkoutState extends State<Workout> {
   @override
   void initState() {
     super.initState();
-    fetchWorkouts();
+    userId = widget.userId;
+    _loadUserIdAndWorkouts();
+  }
 
-    // Load previous stats once
-    WorkoutStatsStorage.loadStats().then((stats) {
+  Future<void> _loadUserIdAndWorkouts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Only load from prefs if widget.userId was not passed
+      userId ??= prefs.getString('userId');
+
+      // If still null, fetch from API
+      if (userId == null || userId!.isEmpty) {
+        final profile = await ApiService.getProfile();
+        userId = profile['_id']?.toString();
+
+        if (userId == null) {
+          debugPrint("⚠️ userId is null from API");
+          return;
+        }
+
+        await prefs.setString('userId', userId!);
+      }
+
+      await fetchWorkouts();
+
+      final stats = await WorkoutStatsStorage.loadStats(userId!);
       setState(() {
         prevFinished = stats['finishedWorkouts'];
         prevInProgress = stats['inProgressWorkouts'];
         prevMinutes = stats['totalMinutes'];
 
-        // Update Home screen with persisted stats
         widget.onStatsUpdate?.call(
           finished: prevFinished,
           inProgress: prevInProgress,
           minutes: prevMinutes,
         );
       });
-    });
+    } catch (e) {
+      debugPrint("❌ Error loading userId or workouts: $e");
+    }
   }
 
   Future<void> fetchWorkouts() async {
     try {
       final data = await ApiService.getWorkouts();
+      final savedStates = await WorkoutStatsStorage.loadWorkoutStates(userId!);
+
       setState(() {
         workouts = data.map((w) {
           w["exercises"] = (w["exercises"] as List).map((ex) {
-            ex["status"] = "not_started";
-            ex["elapsedSeconds"] = 0;
+            final savedEx = savedStates.firstWhere(
+              (s) => s["_id"] == ex["_id"] || s["name"] == ex["name"],
+              orElse: () => {},
+            );
+
+            ex["status"] = savedEx["status"] ?? "not_started";
+            ex["elapsedSeconds"] = savedEx["elapsedSeconds"] ?? 0;
+
             return ex;
           }).toList();
           return w;
@@ -66,6 +101,11 @@ class _WorkoutState extends State<Workout> {
         context,
       ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
+  }
+
+  // Save individual exercise state
+  void _saveExerciseState(Map<String, dynamic> exercise) async {
+    await WorkoutStatsStorage.saveExerciseState(userId!, exercise);
   }
 
   void showExerciseTimer(Map<String, dynamic> exercise) {
@@ -83,6 +123,7 @@ class _WorkoutState extends State<Workout> {
               if (exercise["status"] == "in_progress") {
                 activeTimers[id]?.cancel();
                 exercise["status"] = "paused";
+                _saveExerciseState(exercise);
               } else {
                 exercise["status"] = "in_progress";
                 activeTimers[id] = Timer.periodic(const Duration(seconds: 1), (
@@ -95,7 +136,8 @@ class _WorkoutState extends State<Workout> {
                       timer.cancel();
                       exercise["status"] = "finished";
                     }
-                    _updateStats(); // Update cumulative stats
+                    _updateStats();
+                    _saveExerciseState(exercise); // persist on each tick
                   });
                 });
               }
@@ -121,11 +163,21 @@ class _WorkoutState extends State<Workout> {
                     children: [
                       TextButton(
                         onPressed: () {
-                          activeTimers[id]?.cancel();
+                          // Stop the timer if active
+                          if (exercise["status"] == "in_progress") {
+                            activeTimers[id]?.cancel();
+                            exercise["status"] =
+                                "paused"; // make sure it shows "Start" next time
+                            _saveExerciseState(
+                              exercise,
+                            ); // persist state as paused
+                          }
+
                           Navigator.pop(context);
                         },
                         child: const Text("Close"),
                       ),
+
                       ElevatedButton(
                         onPressed: startPauseTimer,
                         child: Text(
@@ -195,6 +247,7 @@ class _WorkoutState extends State<Workout> {
 
     // Save for persistence
     WorkoutStatsStorage.saveStats(
+      userId: userId!,
       finished: totalFinished,
       inProgress: totalInProgress,
       minutes: totalMinutes,
@@ -207,6 +260,53 @@ class _WorkoutState extends State<Workout> {
       t?.cancel();
     }
     super.dispose();
+  }
+
+  Future<void> deleteExercise(String workoutId, String exerciseId) async {
+    try {
+      final token = await ApiService.getToken();
+      final response = await http.delete(
+        Uri.parse(
+          '${ApiService.baseUrl}/workouts/$workoutId/exercises/$exerciseId',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          final workoutIndex = workouts.indexWhere(
+            (w) => w["_id"] == workoutId,
+          );
+          if (workoutIndex != -1) {
+            workouts[workoutIndex]["exercises"].removeWhere(
+              (ex) => ex["_id"].toString() == exerciseId,
+            );
+
+            // If no exercises left, remove the workout card
+            if (workouts[workoutIndex]["exercises"].isEmpty) {
+              workouts.removeAt(workoutIndex);
+            }
+          }
+        });
+
+        // Remove from persistent state
+        await WorkoutStatsStorage.removeExerciseState(userId!, exerciseId);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Exercise deleted successfully")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to delete exercise: ${response.body}"),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 
   @override
@@ -231,9 +331,17 @@ class _WorkoutState extends State<Workout> {
                     (w["exercises"] != null && w["exercises"] is List)
                     ? w["exercises"] as List
                     : [];
-                final firstExercise = exercises.isNotEmpty
-                    ? exercises[0]
-                    : null;
+                if (exercises.isEmpty) {
+                  // Remove workout from UI if no exercises remain
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    setState(() {
+                      workouts.removeAt(index);
+                    });
+                  });
+                  return const SizedBox.shrink(); // empty placeholder
+                }
+
+                final firstExercise = exercises[0];
 
                 return GestureDetector(
                   onTap: () {
@@ -315,6 +423,20 @@ class _WorkoutState extends State<Workout> {
                                     ),
                                   ),
                                 ],
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () {
+                                  final workoutId = w["_id"];
+                                  final exerciseId = firstExercise?["_id"]
+                                      ?.toString();
+                                  if (exerciseId != null) {
+                                    deleteExercise(workoutId, exerciseId);
+                                  }
+                                },
                               ),
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(20),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:my_fitness/APIs/api_service.dart';
 import 'package:my_fitness/pages/bottomnav.dart';
 import 'package:my_fitness/pages/signup.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -17,19 +18,44 @@ class _LoginState extends State<Login> {
 
   void login() async {
     setState(() => loading = true);
+
     try {
       var data = await ApiService.login(
-        emailController.text,
-        passwordController.text,
+        emailController.text.trim(),
+        passwordController.text.trim(),
       );
-      if (data['token'] != null) {
+
+      if (data != null && data['token'] != null) {
+        final prefs = await SharedPreferences.getInstance();
+
+        // ✅ Convert all fields safely to String
+        final userId = data['_id']?.toString();
+        final userName = data['name']?.toString();
+        final token = data['token']?.toString();
+
+        if (userId == null || token == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login failed: invalid server response'),
+            ),
+          );
+          setState(() => loading = false);
+          return;
+        }
+
+        // ✅ Save them safely
+        await prefs.setString('userId', userId);
+        if (userName != null) await prefs.setString('userName', userName);
+        await prefs.setString('token', token);
+
+        // ✅ Navigate to main page
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => Bottomnav()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(data['message'] ?? 'Login failed')),
+          SnackBar(content: Text(data?['message'] ?? 'Login failed')),
         );
       }
     } catch (e) {
@@ -37,6 +63,7 @@ class _LoginState extends State<Login> {
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+
     setState(() => loading = false);
   }
 

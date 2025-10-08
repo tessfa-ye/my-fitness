@@ -90,4 +90,25 @@ router.put("/:id/finish", auth, async (req, res) => {
   }
 });
 
+// ✅ Delete an exercise from a workout
+router.delete("/:workoutId/exercises/:exerciseId", auth, async (req, res) => {
+  try {
+    const { workoutId, exerciseId } = req.params;
+
+    const workout = await Workout.findOne({ _id: workoutId, userId: req.user.id });
+    if (!workout) return res.status(404).json({ message: "Workout not found" });
+
+    // Remove exercise by ID (or name if you prefer)
+    workout.exercises = workout.exercises.filter(
+      ex => ex._id.toString() !== exerciseId.toString()
+    );
+
+    await workout.save();
+    res.json({ message: "Exercise deleted successfully", workout });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 module.exports = router;

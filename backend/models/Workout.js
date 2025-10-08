@@ -16,6 +16,7 @@ const WorkoutSchema = new mongoose.Schema(
         sets: Number,
         repetitions: Number,
         timeInMinutes: Number,
+        _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
       },
     ],
 
