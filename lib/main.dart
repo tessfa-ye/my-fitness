@@ -1,3 +1,4 @@
+import 'package:device_preview/device_preview.dart';
 import 'package:flutter/material.dart';
 import 'package:my_fitness/pages/bottomnav.dart';
 import 'package:my_fitness/pages/home.dart';
@@ -5,7 +6,12 @@ import 'package:my_fitness/pages/landing_page.dart';
 import 'package:my_fitness/pages/login.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    DevicePreview(
+      enabled: true, // Turn on the preview
+      builder: (context) => MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -19,6 +25,9 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
+      useInheritedMediaQuery: true,
+      builder: DevicePreview.appBuilder,
+      locale: DevicePreview.locale(context),
       home: const LandingPage(),
     );
   }

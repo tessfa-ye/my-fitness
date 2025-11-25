@@ -23,10 +23,8 @@ class _WorkoutState extends State<Workout> {
   bool isLoading = true;
 
   Map<String, Timer?> activeTimers = {};
-
-  int prevFinished = 0;
-  int prevInProgress = 0;
-  double prevMinutes = 0;
+  Set<String> startedExercises = {}; // for exercises that have been started
+  Set<String> finishedExercises = {}; // for exercises that have been completed
 
   @override
   void initState() {
@@ -55,22 +53,18 @@ class _WorkoutState extends State<Workout> {
       }
 
       await fetchWorkouts();
-
-      final stats = await WorkoutStatsStorage.loadStats(userId!);
-      setState(() {
-        prevFinished = stats['finishedWorkouts'];
-        prevInProgress = stats['inProgressWorkouts'];
-        prevMinutes = stats['totalMinutes'];
-
-        widget.onStatsUpdate?.call(
-          finished: prevFinished,
-          inProgress: prevInProgress,
-          minutes: prevMinutes,
-        );
-      });
+      _updateStats(); // Recalculate stats from loaded workouts
     } catch (e) {
       debugPrint("❌ Error loading userId or workouts: $e");
     }
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+    final formattedMinutes = minutes.toString().padLeft(2, '0');
+    final formattedSeconds = secs.toString().padLeft(2, '0');
+    return "$formattedMinutes:$formattedSeconds";
   }
 
   Future<void> fetchWorkouts() async {
@@ -88,6 +82,14 @@ class _WorkoutState extends State<Workout> {
 
             ex["status"] = savedEx["status"] ?? "not_started";
             ex["elapsedSeconds"] = savedEx["elapsedSeconds"] ?? 0;
+
+            // Initialize sets based on loaded state
+            final id = ex["_id"] ?? ex["name"];
+            if (ex["status"] == "in_progress") {
+              startedExercises.add(id);
+            } else if (ex["status"] == "finished") {
+              finishedExercises.add(id);
+            }
 
             return ex;
           }).toList();
@@ -131,13 +133,15 @@ class _WorkoutState extends State<Workout> {
                 ) {
                   setStateDialog(() {
                     exercise["elapsedSeconds"]++;
+                    // Update stats every second so time spent is accurate
+                    _updateStats(syncToBackend: false);
+
                     if (exercise["elapsedSeconds"] >=
                         (exercise["timeInMinutes"] ?? 0) * 60) {
                       timer.cancel();
                       exercise["status"] = "finished";
+                      _updateStats(syncToBackend: true); // Final update
                     }
-                    _updateStats();
-                    _saveExerciseState(exercise); // persist on each tick
                   });
                 });
               }
@@ -156,7 +160,9 @@ class _WorkoutState extends State<Workout> {
                             .clamp(0.0, 1.0),
                   ),
                   Text(
-                    "${exercise["elapsedSeconds"] ?? 0} sec / ${(exercise["timeInMinutes"] ?? 0) * 60} sec",
+                    "${_formatTime(exercise["elapsedSeconds"] ?? 0)} / "
+                    "${_formatTime(((exercise["timeInMinutes"] ?? 0) * 60).toInt())} min",
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -171,6 +177,7 @@ class _WorkoutState extends State<Workout> {
                             _saveExerciseState(
                               exercise,
                             ); // persist state as paused
+                            _updateStats(syncToBackend: true);
                           }
 
                           Navigator.pop(context);
@@ -228,37 +235,103 @@ class _WorkoutState extends State<Workout> {
     return total;
   }
 
-  // ✅ Merge current + previous stats and persist
-  void _updateStats() {
-    final currentFinished = _calculateFinished();
-    final currentInProgress = _calculateInProgress();
-    final currentMinutes = _calculateTotalMinutes();
+  void _updateStats({bool syncToBackend = true}) {
+    // Recalculate everything from scratch based on current state
+    int finished = 0;
+    int inProgress = 0;
+    double totalMinutes = 0;
 
-    final totalFinished = prevFinished + currentFinished;
-    final totalInProgress = prevInProgress + currentInProgress;
-    final totalMinutes = prevMinutes + currentMinutes;
+    for (var w in workouts) {
+      for (var ex in w["exercises"]) {
+        final status = ex["status"];
+        if (status == "finished") {
+          finished++;
+        } else if (status == "in_progress") {
+          inProgress++;
+        }
+        totalMinutes += (ex["elapsedSeconds"] ?? 0) / 60;
+      }
+    }
 
-    // Update Home screen
+    // Update UI
     widget.onStatsUpdate?.call(
-      finished: totalFinished,
-      inProgress: totalInProgress,
+      finished: finished,
+      inProgress: inProgress,
       minutes: totalMinutes,
     );
 
-    // Save for persistence
+    // Save stats persistently
     WorkoutStatsStorage.saveStats(
       userId: userId!,
-      finished: totalFinished,
-      inProgress: totalInProgress,
+      finished: finished,
+      inProgress: inProgress,
       minutes: totalMinutes,
     );
+
+    // Sync to backend (optional, best effort)
+    if (syncToBackend) {
+      for (var w in workouts) {
+        if (w["_id"] == null) continue;
+
+        // Calculate progress for this specific workout
+        int completedSets = 0;
+        int totalSets = 0;
+        int timeSpentSeconds = 0;
+        bool isFinished = true; // assume finished until found otherwise
+
+        for (var ex in w["exercises"]) {
+          totalSets += (ex["sets"] as int? ?? 0);
+          if (ex["status"] == "finished") {
+            completedSets += (ex["sets"] as int? ?? 0);
+          } else {
+            isFinished = false;
+          }
+          timeSpentSeconds += (ex["elapsedSeconds"] as int? ?? 0);
+        }
+
+        // Only update if there is progress
+        if (timeSpentSeconds > 0 || completedSets > 0) {
+          ApiService.updateWorkoutProgress(
+            workoutId: w["_id"],
+            completedSets: completedSets,
+            totalSets: totalSets,
+            timeSpentSeconds: timeSpentSeconds,
+            isFinished: isFinished,
+          ).catchError((e) {
+            debugPrint("Failed to sync workout ${w["_id"]}: $e");
+            return {};
+          });
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
-    for (var t in activeTimers.values) {
-      t?.cancel();
+    // Save state of all active timers before disposing
+    for (var entry in activeTimers.entries) {
+      final id = entry.key;
+      final timer = entry.value;
+
+      if (timer != null && timer.isActive) {
+        timer.cancel();
+
+        // Find the exercise and update status to paused
+        for (var w in workouts) {
+          for (var ex in w["exercises"]) {
+            final exId = ex["_id"] ?? ex["name"];
+            if (exId == id) {
+              ex["status"] = "paused";
+              _saveExerciseState(ex);
+            }
+          }
+        }
+      }
     }
+
+    // Final stats update
+    _updateStats(syncToBackend: true);
+
     super.dispose();
   }
 
@@ -273,39 +346,45 @@ class _WorkoutState extends State<Workout> {
       );
 
       if (response.statusCode == 200) {
-        setState(() {
-          final workoutIndex = workouts.indexWhere(
-            (w) => w["_id"] == workoutId,
-          );
-          if (workoutIndex != -1) {
-            workouts[workoutIndex]["exercises"].removeWhere(
-              (ex) => ex["_id"].toString() == exerciseId,
+        if (mounted) {
+          setState(() {
+            final workoutIndex = workouts.indexWhere(
+              (w) => w["_id"] == workoutId,
             );
+            if (workoutIndex != -1) {
+              workouts[workoutIndex]["exercises"].removeWhere(
+                (ex) => ex["_id"].toString() == exerciseId,
+              );
 
-            // If no exercises left, remove the workout card
-            if (workouts[workoutIndex]["exercises"].isEmpty) {
-              workouts.removeAt(workoutIndex);
+              // If no exercises left, remove the workout card
+              if (workouts[workoutIndex]["exercises"].isEmpty) {
+                workouts.removeAt(workoutIndex);
+              }
             }
-          }
-        });
+          });
 
-        // Remove from persistent state
-        await WorkoutStatsStorage.removeExerciseState(userId!, exerciseId);
+          // Remove from persistent state
+          await WorkoutStatsStorage.removeExerciseState(userId!, exerciseId);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Exercise deleted successfully")),
-        );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Exercise deleted successfully")),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Failed to delete exercise: ${response.body}"),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Failed to delete exercise: ${response.body}"),
+            ),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:my_fitness/APIs/api_service.dart';
 import 'package:my_fitness/pages/bottomnav.dart';
 import 'package:my_fitness/pages/login.dart';
+import 'package:my_fitness/services/workout_stats_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -24,11 +26,24 @@ class _SignupState extends State<Signup> {
         emailController.text,
         passwordController.text,
       );
-      if (data['token'] != null) {
+
+      if (data['token'] != null && data['user'] != null) {
+        final user = data['user'];
+
+        // ✅ Save new user data to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userId', user['id']); // <--- correct path
+        await prefs.setString('userName', user['name']); // <--- correct path
+        await prefs.setString('token', data['token']);
+
+        // ✅ Clear old cached stats
+        await WorkoutStatsStorage.clearStats(user['id']);
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => Bottomnav()),
         );
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.green,

@@ -1,42 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:my_fitness/exercise/exerecise_detail.dart';
 
-class CardioPage extends StatelessWidget {
-  final List<Map<String, String>> cardioExercises = [
+class ArmPage extends StatelessWidget {
+  final List<Map<String, String>> armExercises = [
     {
-      "name": "Running",
-      "image": "images/running.png",
-      "duration": "30 min",
-      "description":
-          "Running improves cardiovascular health and burns calories effectively.",
-    },
-    {
-      "name": "Jumping Jacks",
-      "image": "images/jumping_jacks.png",
-      "duration": "5 min",
-      "description":
-          "A full-body workout that increases heart rate and improves coordination.",
-    },
-    {
-      "name": "Burpees",
-      "image": "images/burpees.png",
+      "name": "Bicep Curls",
+      "image": "images/bicep_curls.png",
       "duration": "10 min",
       "description":
-          "A high-intensity exercise that builds strength and endurance.",
+          "Isolates the biceps to build arm strength and definition.",
     },
     {
-      "name": "High Knees",
-      "image": "images/high_knees.png",
-      "duration": "5 min",
+      "name": "Tricep Dips",
+      "image": "images/tricep_dips.png",
+      "duration": "10 min",
       "description":
-          "Engages the core and legs while boosting heart rate.",
+          "Targets the triceps using body weight for resistance.",
     },
     {
-      "name": "Mountain Climbers",
-      "image": "images/mountain_climbers.png",
-      "duration": "5 min",
+      "name": "Pushups",
+      "image": "images/pushup.png",
+      "duration": "10 min",
       "description":
-          "A dynamic exercise that targets the core, shoulders, and legs.",
+          "A compound exercise that works the chest, shoulders, and triceps.",
+    },
+    {
+      "name": "Hammer Curls",
+      "image": "images/hammer_curls.png",
+      "duration": "10 min",
+      "description":
+          "Targets the biceps and forearms for overall arm development.",
+    },
+    {
+      "name": "Overhead Press",
+      "image": "images/overhead_press.png",
+      "duration": "10 min",
+      "description":
+          "Builds shoulder and tricep strength with overhead movement.",
     },
   ];
 
@@ -44,14 +44,14 @@ class CardioPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Cardio Exercises"),
-        backgroundColor: const Color(0xff57949e),
+        title: Text("Arm Exercises"),
+        backgroundColor: const Color.fromARGB(181, 89, 155, 241),
       ),
       body: ListView.builder(
         padding: EdgeInsets.all(16),
-        itemCount: cardioExercises.length,
+        itemCount: armExercises.length,
         itemBuilder: (context, index) {
-          final exercise = cardioExercises[index];
+          final exercise = armExercises[index];
           return Card(
             margin: EdgeInsets.only(bottom: 15),
             shape: RoundedRectangleBorder(

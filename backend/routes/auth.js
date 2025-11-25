@@ -8,22 +8,53 @@ require('dotenv').config();
 // Signup
 router.post('/signup', async (req, res) => {
   const { name, email, password } = req.body;
+
   try {
+    // 1️⃣ Validate input
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'All fields are required!' });
     }
+
+    // 2️⃣ Check if email exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: 'Email already exists' });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
 
+    // 3️⃣ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hashedPassword });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ user, token });
+    // 4️⃣ Create user
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    // ✅ Convert _id to string explicitly
+    const userId = user._id.toString();
+
+    // 5️⃣ Create token with string id
+    const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+      expiresIn: '7d',
+    });
+
+    // 6️⃣ Build a clean user object to send
+    const userData = {
+      id: userId,
+      name: user.name,
+      email: user.email,
+    };
+
+    // 7️⃣ Send response
+    res.status(201).json({ user: userData, token });
   } catch (err) {
+    console.error('Signup Error:', err);
     res.status(500).json({ message: err.message });
   }
 });
+
+
 
 // Login
 router.post('/login', async (req, res) => {

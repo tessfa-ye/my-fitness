@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:my_fitness/APIs/api_service.dart';
 import 'package:my_fitness/exercise/stretching_page.dart';
+import 'package:my_fitness/exercise/cardio_page.dart';
+import 'package:my_fitness/exercise/arm_page.dart';
 import 'package:my_fitness/pages/workout.dart';
 import 'package:my_fitness/services/support_widget.dart';
 import 'package:my_fitness/services/workout_stats_storage.dart';
@@ -21,6 +23,7 @@ class HomeState extends State<Home> {
   int totalWorkouts = 0;
   int inProgressWorkouts = 0;
   double totalMinutes = 0;
+  List<dynamic> topWorkouts = [];
 
   @override
   void initState() {
@@ -32,6 +35,19 @@ class HomeState extends State<Home> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _loadUserData();
+  }
+
+  String _formatTimeSpent(double totalMinutes) {
+    int totalSeconds = (totalMinutes * 60).toInt();
+    int hours = totalSeconds ~/ 3600;
+    int minutes = (totalSeconds % 3600) ~/ 60;
+    int seconds = totalSeconds % 60;
+
+    String h = hours.toString().padLeft(2, '0');
+    String m = minutes.toString().padLeft(2, '0');
+    String s = seconds.toString().padLeft(2, '0');
+
+    return "$h:$m:$s";
   }
 
   Future<void> refreshStats() async {
@@ -77,13 +93,15 @@ class HomeState extends State<Home> {
         avatarUrl = storedAvatar ?? "";
       });
 
-      // ✅ Load user stats
-      final stats = await WorkoutStatsStorage.loadStats(userId);
-      setState(() {
-        totalWorkouts = stats['finishedWorkouts'];
-        inProgressWorkouts = stats['inProgressWorkouts'];
-        totalMinutes = stats['totalMinutes'];
-      });
+      // ✅ Load user stats from API
+      if (userId != null) {
+        final stats = await ApiService.getUserStats(userId!);
+        setState(() {
+          totalWorkouts = stats['finished'] ?? 0;
+          inProgressWorkouts = stats['inProgress'] ?? 0;
+          totalMinutes = (stats['totalTimeSeconds'] ?? 0) / 60;
+        });
+      }
     } catch (e) {
       print("⚠️ Error loading user data: $e");
     }
@@ -244,18 +262,14 @@ class HomeState extends State<Home> {
                               Row(
                                 children: [
                                   Text(
-                                    totalMinutes.toStringAsFixed(1),
+                                    _formatTimeSpent(totalMinutes),
                                     style: AppWidget.healineTextStyle(24),
                                   ),
                                   SizedBox(width: 10),
                                   Text(
-                                    "Minutes",
+                                    "hr",
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Color.fromARGB(147, 0, 0, 0),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                    style: AppWidget.healineTextStyle(24),
                                   ),
                                 ],
                               ),
@@ -325,93 +339,109 @@ class HomeState extends State<Home> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    Container(
-                      margin: EdgeInsets.only(bottom: 10),
-                      child: Material(
-                        elevation: 3,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: EdgeInsets.only(left: 20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xff57949e),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Cardio",
-                                    style: AppWidget.whiteBoldTextStyle(28),
-                                  ),
-                                  Text(
-                                    "5 Exercises",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => CardioPage()),
+                        );
+                      },
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: 10),
+                        child: Material(
+                          elevation: 3,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: EdgeInsets.only(left: 20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xff57949e),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Cardio",
+                                      style: AppWidget.whiteBoldTextStyle(28),
                                     ),
-                                  ),
-                                  Text(
-                                    "25 Minutes",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                                    Text(
+                                      "5 Exercises",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              Image.asset("images/cardio.png"),
-                            ],
+                                    Text(
+                                      "25 Minutes",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Image.asset("images/cardio.png"),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                     SizedBox(width: 20),
-                    Container(
-                      margin: EdgeInsets.only(bottom: 10),
-                      child: Material(
-                        elevation: 3,
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: EdgeInsets.only(left: 20),
-                          decoration: BoxDecoration(
-                            color: const Color.fromARGB(181, 89, 155, 241),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    "Arm",
-                                    style: AppWidget.whiteBoldTextStyle(28),
-                                  ),
-                                  Text(
-                                    "10 Exercises",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => ArmPage()),
+                        );
+                      },
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: 10),
+                        child: Material(
+                          elevation: 3,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: EdgeInsets.only(left: 20),
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(181, 89, 155, 241),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Arm",
+                                      style: AppWidget.whiteBoldTextStyle(28),
                                     ),
-                                  ),
-                                  Text(
-                                    "40 Minutes",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
+                                    Text(
+                                      "10 Exercises",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              Image.asset("images/arm.png"),
-                            ],
+                                    Text(
+                                      "40 Minutes",
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Image.asset("images/arm.png"),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -482,256 +512,110 @@ class HomeState extends State<Home> {
               // column 4,5,6....
               Text("Top Workouts", style: AppWidget.healineTextStyle(20)),
               SizedBox(height: 20),
-              Container(
-                margin: EdgeInsets.only(right: 50, left: 10),
-                child: Material(
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: EdgeInsets.only(left: 30, top: 10, bottom: 8),
-                    width: MediaQuery.of(context).size.width,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Squats",
-                              style: AppWidget.healineTextStyle(22),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              "3 Sets | 10 Repetitions",
-                              style: TextStyle(
-                                color: Color.fromARGB(147, 0, 0, 0),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
+              ...topWorkouts.map((workout) {
+                return Container(
+                  margin: EdgeInsets.only(right: 50, left: 10, bottom: 20),
+                  child: Material(
+                    elevation: 3,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: EdgeInsets.only(left: 30, top: 10, bottom: 8),
+                      width: MediaQuery.of(context).size.width,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                workout["name"] ?? "Unknown",
+                                style: AppWidget.healineTextStyle(22),
                               ),
-                            ),
-                            SizedBox(height: 5),
+                              SizedBox(height: 5),
+                              Text(
+                                "${workout["sets"] ?? 0} Sets | ${workout["repetitions"] ?? 0} Repetitions",
+                                style: TextStyle(
+                                  color: Color.fromARGB(147, 0, 0, 0),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 5),
 
-                            Container(
-                              padding: EdgeInsets.all(5),
-                              width: 100,
-                              decoration: BoxDecoration(
-                                color: Color(0xffebeafb),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.alarm,
-                                    color: const Color.fromARGB(
-                                      112,
-                                      194,
-                                      45,
-                                      236,
-                                    ),
-                                    size: 25,
-                                  ),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    "10:00",
-                                    style: TextStyle(
+                              Container(
+                                padding: EdgeInsets.all(5),
+                                width: 100,
+                                decoration: BoxDecoration(
+                                  color: Color(0xffebeafb),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.alarm,
                                       color: const Color.fromARGB(
-                                        113,
-                                        187,
-                                        40,
-                                        228,
+                                        112,
+                                        194,
+                                        45,
+                                        236,
                                       ),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                                      size: 25,
                                     ),
-                                  ),
-                                ],
+                                    SizedBox(width: 5),
+                                    Text(
+                                      "${workout["timeInMinutes"] ?? 0}:00",
+                                      style: TextStyle(
+                                        color: const Color.fromARGB(
+                                          113,
+                                          187,
+                                          40,
+                                          228,
+                                        ),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(width: 10),
-                        Image.asset(
-                          "images/squat.png",
-                          height: 100,
-                          width: 100,
-                          fit: BoxFit.cover,
-                        ),
-                      ],
+                            ],
+                          ),
+                          SizedBox(width: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child:
+                                workout["image"] != null &&
+                                    workout["image"].toString().isNotEmpty
+                                ? Image.asset(
+                                    workout["image"],
+                                    height: 100,
+                                    width: 100,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        height: 100,
+                                        width: 100,
+                                        color: Colors.grey[200],
+                                        child: Icon(Icons.fitness_center),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    height: 100,
+                                    width: 100,
+                                    color: Colors.grey[200],
+                                    child: Icon(Icons.fitness_center),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-              Container(
-                margin: EdgeInsets.only(right: 50, left: 10),
-                child: Material(
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: EdgeInsets.only(left: 30, top: 10, bottom: 8),
-                    width: MediaQuery.of(context).size.width,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Pushups",
-                              style: AppWidget.healineTextStyle(22),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              "2 Sets | 20 Repetitions",
-                              style: TextStyle(
-                                color: Color.fromARGB(147, 0, 0, 0),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(height: 5),
-
-                            Container(
-                              padding: EdgeInsets.all(5),
-                              width: 100,
-                              decoration: BoxDecoration(
-                                color: Color(0xffebeafb),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.alarm,
-                                    color: const Color.fromARGB(
-                                      112,
-                                      194,
-                                      45,
-                                      236,
-                                    ),
-                                    size: 25,
-                                  ),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    "20:00",
-                                    style: TextStyle(
-                                      color: const Color.fromARGB(
-                                        113,
-                                        187,
-                                        40,
-                                        228,
-                                      ),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(width: 10),
-                        Image.asset(
-                          "images/pushup.png",
-                          height: 100,
-                          width: 100,
-                          fit: BoxFit.cover,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              SizedBox(height: 20),
-              Container(
-                margin: EdgeInsets.only(right: 50, left: 10),
-                child: Material(
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: EdgeInsets.only(left: 30, top: 10, bottom: 8),
-                    width: MediaQuery.of(context).size.width,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Situps",
-                              style: AppWidget.healineTextStyle(22),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              "1 Sets | 10 Repetitions",
-                              style: TextStyle(
-                                color: Color.fromARGB(147, 0, 0, 0),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(height: 5),
-
-                            Container(
-                              padding: EdgeInsets.all(5),
-                              width: 100,
-                              decoration: BoxDecoration(
-                                color: Color(0xffebeafb),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.alarm,
-                                    color: const Color.fromARGB(
-                                      112,
-                                      194,
-                                      45,
-                                      236,
-                                    ),
-                                    size: 25,
-                                  ),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    "5:00",
-                                    style: TextStyle(
-                                      color: const Color.fromARGB(
-                                        113,
-                                        187,
-                                        40,
-                                        228,
-                                      ),
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(width: 10),
-                        Image.asset(
-                          "images/situp.png",
-                          height: 100,
-                          width: 100,
-                          fit: BoxFit.cover,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+                );
+              }).toList(),
               SizedBox(height: 100),
             ],
           ),

@@ -81,7 +81,7 @@ class StretchingPage extends StatelessWidget {
             elevation: 4,
             child: ListTile(
               leading: ClipRRect(
-                borderRadius: BorderRadiusGeometry.circular(20),
+                borderRadius: BorderRadius.circular(20),
                 child: Image.asset(
                   exercise["image"]!,
                   height: 60,
